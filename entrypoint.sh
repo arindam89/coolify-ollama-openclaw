@@ -19,4 +19,4 @@ else
 fi
 
 # Start OpenClaw gateway
-exec openclaw gateway --port 18789 --bind 0.0.0.0 --token "$OPENCLAW_GATEWAY_TOKEN"
+exec openclaw gateway --port 18789 --bind auto --token "$OPENCLAW_GATEWAY_TOKEN"
