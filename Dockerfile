@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y curl && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install OpenClaw globally
-RUN npm install -g @openclaw/cli@latest
+RUN npm install -g openclaw@latest
 
 # Create working directories
 RUN mkdir -p /root/.openclaw/workspace /root/.ollama
