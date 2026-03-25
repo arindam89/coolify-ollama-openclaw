@@ -1,16 +1,24 @@
-FROM ollama/ollama:latest AS ollama-base
+# ============================================================
+# OpenClaw + Ollama — Single Container
+# Node 24 required by OpenClaw (https://www.npmjs.com/package/openclaw)
+# ============================================================
+FROM node:24-slim
 
-# Install Node.js (OpenClaw requires it)
-RUN apt-get update && apt-get install -y curl && \
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    bash \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install OpenClaw globally
-RUN npm install -g @openclaw/cli@latest
+# Install Ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# Install OpenClaw globally (correct package name: openclaw, not @openclaw/cli)
+RUN npm install -g openclaw@latest
 
 # Create working directories
-RUN mkdir -p /root/.openclaw/workspace /root/.ollama
+RUN mkdir -p /root/.ollama /root/.openclaw/workspace
 
 # Copy entrypoint
 COPY entrypoint.sh /entrypoint.sh

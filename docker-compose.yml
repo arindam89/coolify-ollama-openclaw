@@ -1,3 +1,5 @@
+# docker-compose.yml — OpenClaw + Ollama for Coolify
+# Deploy via: Coolify > New Resource > Docker Compose > paste this file
 services:
   openclaw-ollama:
     build: .
@@ -6,8 +8,8 @@ services:
     ports:
       - "18789:18789"
     environment:
-      - OLLAMA_API_KEY=${OLLAMA_API_KEY}           # API key from ollama.com
-      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}                   # API key from ollama.com (required for cloud models)
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}   # Generate: openssl rand -hex 32
       - TZ=${TZ:-UTC}
     volumes:
       - ollama_data:/root/.ollama
@@ -18,7 +20,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 45s
 
 volumes:
   ollama_data:

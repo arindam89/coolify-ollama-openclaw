@@ -9,187 +9,151 @@ Ollama runs locally inside the container as an authentication proxy to **Ollama 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  Coolify Server                      │
+┌──────────────────────────────────────────────────────┐
+│                   Coolify Server                     │
 │                                                      │
-│  ┌───────────────────────────────────────────────┐   │
-│  │         Single Docker Container                │   │
-│  │                                                │   │
-│  │   ┌──────────────┐     ┌──────────────────┐   │   │
-│  │   │   OpenClaw    │────▶│     Ollama       │   │   │
-│  │   │   Gateway     │     │  (local process) │   │   │
-│  │   │  :18789       │     │  :11434          │   │   │
-│  │   └──────────────┘     └────────┬─────────┘   │   │
-│  │                                  │             │   │
-│  └──────────────────────────────────┼─────────────┘   │
-│                                     │                 │
-└─────────────────────────────────────┼─────────────────┘
-                                      │ HTTPS + Bearer Token
-                                      ▼
-                            ┌──────────────────┐
-                            │   Ollama Cloud    │
-                            │  ollama.com/api   │
-                            │  (remote models)  │
-                            └──────────────────┘
+│  ┌────────────────────────────────────────────────┐  │
+│  │          Single Docker Container               │  │
+│  │                                                │  │
+│  │   ┌──────────────┐    ┌──────────────────┐    │  │
+│  │   │    Ollama    │    │    OpenClaw      │    │  │
+│  │   │  (port 11434)│◄───│  Gateway :18789  │    │  │
+│  │   └──────┬───────┘    └──────────────────┘    │  │
+│  │          │                     ▲               │  │
+│  └──────────┼─────────────────────┼───────────────┘  │
+│             │                     │                  │
+└─────────────┼─────────────────────┼──────────────────┘
+              │ OLLAMA_API_KEY       │ OPENCLAW_GATEWAY_TOKEN
+              ▼                     │ (client connects here)
+       ┌─────────────┐              │
+       │ Ollama Cloud│              │
+       │ ollama.com  │         OpenClaw Client
+       └─────────────┘         (browser / app)
 ```
 
-### How It Works
+### Why a local Ollama inside the container?
 
-1. **Ollama** starts as a background process inside the container, listening on `localhost:11434`.
-2. **Ollama Cloud auth** is handled automatically — the `OLLAMA_API_KEY` environment variable is used by Ollama to authenticate requests to `ollama.com`.
-3. **OpenClaw Gateway** starts on port `18789` and connects to the local Ollama instance via its native API (`/api/chat`).
-4. When you use a cloud model (e.g. `kimi-k2.5:cloud`), Ollama transparently proxies the request to Ollama Cloud with your API key.
-5. **No GPU required** — all model inference runs on Ollama Cloud's infrastructure.
-
-### Authentication Flow
-
-```
-User Request
-    │
-    ▼
-OpenClaw Gateway (:18789)
-    │  Authenticated via OPENCLAW_GATEWAY_TOKEN
-    ▼
-Local Ollama (:11434)
-    │  No auth needed (localhost)
-    ▼
-Ollama Cloud (ollama.com/api)
-       Authenticated via OLLAMA_API_KEY (Bearer token)
-```
+`ollama signin` requires a browser and **does not work in a headless container**.
+The correct headless approach is to set `OLLAMA_API_KEY` as an environment variable.
+Ollama picks it up automatically when proxying requests to Ollama Cloud — no browser needed.
 
 ---
 
 ## Files
 
 | File | Purpose |
-|---|---|
-| `Dockerfile` | Builds a single image with Ollama + Node.js + OpenClaw |
-| `entrypoint.sh` | Starts Ollama, waits for readiness, configures OpenClaw, launches gateway |
-| `docker-compose.yml` | Coolify-compatible compose file with volumes and health checks |
+|------|---------|
+| `Dockerfile` | Builds the combined image (Node 24 + Ollama + OpenClaw) |
+| `entrypoint.sh` | Starts Ollama, validates env vars, then starts OpenClaw gateway |
+| `docker-compose.yml` | Coolify-ready compose file |
 | `.env.example` | Template for required environment variables |
 
 ---
 
 ## Prerequisites
 
-- A **Coolify** instance (v4+)
-- An **Ollama Cloud** API key from [ollama.com](https://ollama.com)
-- A Git repository to host these files
+- A [Coolify](https://coolify.io) instance (v4+)
+- An [ollama.com](https://ollama.com) account with an **API Key** (not a Device Key)
+- A gateway token (generate with `openssl rand -hex 32`)
 
 ---
 
 ## Quick Start
 
-### 1. Clone and configure
+### 1. Get your Ollama API Key
+
+1. Go to [ollama.com/settings/api-keys](https://ollama.com/settings/api-keys)
+2. Create a new **API Key** (not a Device Key — device keys require browser-based `ollama signin` which doesn't work headlessly)
+3. Copy the key
+
+### 2. Generate a Gateway Token
 
 ```bash
-git clone <your-repo-url>
-cd openclaw-ollama
-cp .env.example .env
+openssl rand -hex 32
 ```
-
-Edit `.env` with your values:
-
-```env
-OLLAMA_API_KEY=your-ollama-cloud-api-key
-OPENCLAW_GATEWAY_TOKEN=your-secure-gateway-token
-TZ=UTC
-```
-
-### 2. Test locally (optional)
-
-```bash
-docker compose up --build
-```
-
-OpenClaw will be available at `http://localhost:18789`.
 
 ### 3. Deploy on Coolify
 
-1. Push the repo to GitHub/GitLab/Gitea.
-2. In Coolify, go to **Add Resource → Docker Compose**.
-3. Point it to your repository.
-4. Set the following environment variables in the Coolify UI:
+1. In Coolify: **New Resource → Docker Compose**
+2. Point it to your Git repo (or paste the `docker-compose.yml` directly)
+3. Set environment variables in Coolify's UI:
 
-   | Variable | Value |
-   |---|---|
-   | `OLLAMA_API_KEY` | Your API key from [ollama.com](https://ollama.com) |
-   | `OPENCLAW_GATEWAY_TOKEN` | A secure random token (e.g. `openssl rand -hex 32`) |
-   | `TZ` | Your timezone (e.g. `America/New_York`) |
+| Variable | Value |
+|----------|-------|
+| `OLLAMA_API_KEY` | Your key from ollama.com |
+| `OPENCLAW_GATEWAY_TOKEN` | Your generated token |
+| `TZ` | e.g. `America/New_York` (optional) |
 
-5. Assign a domain to port `18789`.
-6. Click **Deploy**.
+4. Set the exposed port to `18789`
+5. Deploy
 
 ---
 
 ## Environment Variables
 
 | Variable | Required | Description |
-|---|---|---|
-| `OLLAMA_API_KEY` | ✅ | API key for Ollama Cloud authentication. Get it from your [ollama.com account](https://ollama.com). |
-| `OPENCLAW_GATEWAY_TOKEN` | ✅ | Token to secure the OpenClaw gateway API. Use a strong random string. |
-| `TZ` | ❌ | Timezone for the container. Defaults to `UTC`. |
+|----------|----------|-------------|
+| `OLLAMA_API_KEY` | ✅ Yes | API key from ollama.com for cloud model access |
+| `OPENCLAW_GATEWAY_TOKEN` | ✅ Yes | Auth token for the OpenClaw gateway |
+| `TZ` | ❌ No | Timezone, defaults to `UTC` |
 
 ---
 
 ## Volumes
 
-| Volume | Container Path | Purpose |
-|---|---|---|
-| `ollama_data` | `/root/.ollama` | Ollama config, cached models, and cloud credentials |
-| `openclaw_config` | `/root/.openclaw` | OpenClaw configuration and settings |
-| `openclaw_workspace` | `/root/.openclaw/workspace` | OpenClaw agent workspace and generated files |
+| Volume | Mount Path | Purpose |
+|--------|-----------|---------|
+| `ollama_data` | `/root/.ollama` | Ollama models and config |
+| `openclaw_config` | `/root/.openclaw` | OpenClaw config and state |
+| `openclaw_workspace` | `/root/.openclaw/workspace` | Agent workspace files |
 
-> **Note:** Volumes ensure your data persists across container restarts and redeployments.
+---
+
+## Authentication Flow
+
+```
+OpenClaw → local Ollama (:11434) → Ollama Cloud (ollama.com)
+                                         ↑
+                              OLLAMA_API_KEY env var
+                              (Bearer token in header)
+```
+
+1. OpenClaw sends inference requests to local Ollama
+2. Local Ollama authenticates to Ollama Cloud using `OLLAMA_API_KEY`
+3. Inference runs on Ollama Cloud — no GPU needed on your server
 
 ---
 
 ## Health Check
 
-The container includes a built-in health check:
+The container exposes a health endpoint at `http://localhost:18789/healthz`.
 
-```yaml
-healthcheck:
-  test: ["CMD", "curl", "-sf", "http://127.0.0.1:18789/healthz"]
-  interval: 30s
-  timeout: 5s
-  retries: 5
-  start_period: 30s
-```
-
-Coolify will automatically monitor container health and restart it if the gateway becomes unresponsive.
-
----
-
-## Coolify-Specific Notes
-
-- **Port mapping**: Coolify handles external port assignment and TLS termination. You only need to map your domain to port `18789`.
-- **Environment variables**: Set them in the Coolify UI, not in the `.env` file (which is for local testing only).
-- **Persistent storage**: Coolify manages Docker volumes automatically. Data survives redeployments.
-- **No GPU needed**: Since all inference runs on Ollama Cloud, a basic VPS (1–2 vCPU, 1–2 GB RAM) is sufficient.
-- **Build context**: Coolify will build the Dockerfile from your repo on deploy. Ensure `entrypoint.sh` is in the repo root alongside the `Dockerfile`.
-
----
-
-## Troubleshooting
-
-| Issue | Solution |
-|---|---|
-| Container keeps restarting | Check logs: `docker logs <container>`. Likely missing env vars. |
-| "Ollama not ready" in logs | Ollama may need more time to start. Increase `start_period` in health check. |
-| Cloud models not working | Verify `OLLAMA_API_KEY` is correct. Test with `curl -H "Authorization: Bearer $KEY" https://ollama.com/api/tags`. |
-| OpenClaw gateway unreachable | Ensure Coolify domain is mapped to port `18789`. Check firewall rules. |
-| Permission errors on volumes | Ollama image runs as root by default. If using a non-root user, adjust volume permissions. |
+Coolify will automatically monitor this. If the container is unhealthy, Coolify will restart it.
 
 ---
 
 ## Updating
 
-To update OpenClaw or Ollama:
+1. Pull latest changes from your repo
+2. In Coolify, click **Redeploy**
+3. Coolify will rebuild the image with the latest `openclaw@latest` and `ollama`
 
-1. **OpenClaw**: Change the version in the `Dockerfile` (`@openclaw/cli@latest` or pin a version like `@openclaw/cli@1.2.3`).
-2. **Ollama**: Change the base image tag (`ollama/ollama:latest` or pin like `ollama/ollama:0.5.0`).
-3. Push to your repo and redeploy in Coolify.
+To pin versions, edit the `Dockerfile`:
+```dockerfile
+RUN npm install -g openclaw@2026.3.23-2
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| Build fails at `npm install -g openclaw` | Wrong package name | Ensure it's `openclaw`, not `@openclaw/cli` |
+| Cloud models not working | Missing API key | Set `OLLAMA_API_KEY` in Coolify env vars |
+| Gateway unreachable | Wrong port | Ensure port `18789` is exposed in Coolify |
+| Container exits immediately | Missing gateway token | Set `OPENCLAW_GATEWAY_TOKEN` in Coolify env vars |
+| Browser/agent crashes | Stale Chrome lock | Entrypoint auto-cleans `SingletonLock` on restart |
 
 ---
 
@@ -199,6 +163,7 @@ To update OpenClaw or Ollama:
 - **Use strong tokens** — Generate `OPENCLAW_GATEWAY_TOKEN` with `openssl rand -hex 32`.
 - **Restrict access** — Consider Coolify's built-in IP allowlisting or Cloudflare Access for additional protection.
 - **Rotate keys** — Periodically rotate your `OLLAMA_API_KEY` and `OPENCLAW_GATEWAY_TOKEN`.
+- **Env vars are visible** — In multi-agent setups, if an agent has shell access it can read env vars. Keep this in mind.
 
 ---
 
