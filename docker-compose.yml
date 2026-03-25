@@ -6,10 +6,11 @@ services:
     ports:
       - "18789:18789"
     environment:
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}           # API key from ollama.com
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
       - TZ=${TZ:-UTC}
     volumes:
-      - ollama_data:/root/.ollama        # Ollama config + cloud credentials (persists sign-in)
+      - ollama_data:/root/.ollama
       - openclaw_config:/root/.openclaw
       - openclaw_workspace:/root/.openclaw/workspace
     healthcheck:

@@ -11,16 +11,11 @@ until curl -sf http://127.0.0.1:11434/api/tags > /dev/null 2>&1; do
 done
 echo "Ollama is ready!"
 
-# Check if already signed in to Ollama Cloud
-if ollama list 2>&1 | grep -q "cloud"; then
-  echo "Ollama Cloud: Already signed in (credentials in volume)"
+# Check for Ollama Cloud API key
+if [ -n "$OLLAMA_API_KEY" ]; then
+  echo "Ollama Cloud: API key configured"
 else
-  echo "=============================================="
-  echo "  OLLAMA CLOUD NOT CONFIGURED"
-  echo "  Run this once to sign in:"
-  echo ""
-  echo "  docker exec -it <container> ollama signin"
-  echo "=============================================="
+  echo "WARNING: No OLLAMA_API_KEY set — cloud models won't work"
 fi
 
 # Start OpenClaw gateway
